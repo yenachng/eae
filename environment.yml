@@ -1,0 +1,30 @@
+name: gsp-ad
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy>=1.26
+  - scipy>=1.11
+  - pandas>=2.1
+  - matplotlib>=3.8
+  - scikit-learn>=1.4
+  - networkx>=3.5
+  - nibabel>=5.2
+  - nilearn>=0.12
+  - dipy>=1.10
+  - mne>=1.7
+  - mne-connectivity>=0.7
+  - mne-bids>=0.15
+  - datalad>=0.19
+  - git-annex
+  - pybids>=0.16
+  - numba
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1  # cuda runtime for nvidia gpus
+  - pip
+  - pip:
+      - neuroHarmonize>=2.4

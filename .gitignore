@@ -1,0 +1,25 @@
+# python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# compiled extensions
+*.so
+
+# virtual environments
+.venv/
+venv/
+env/
+
+# package metadata
+data/
+*.log
+scraps/
+
+# jupyter
+.ipynb_checkpoints/
+
+# os-specific
+.DS_Store
+Thumbs.db
