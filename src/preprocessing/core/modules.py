@@ -92,7 +92,7 @@ class PositionalEmbedding(nn.Module):
     '''
     informs the model where each token lies in time
 
-    input: tokens (b, L, h*ps)
+    input: tokens (b, L, dim)
     output:
     '''
     def __init__(self, max_len: int, dim: int):
@@ -105,7 +105,7 @@ class PositionalEmbedding(nn.Module):
         nn.init.trunc_normal_(self.pe, std=0.02)
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
-        b,L,d = x.shape
+        _,L,_ = x.shape
         if L > self.max_len:
             raise ValueError(f"sequence length {L} > max len {self.max_len}")
         # slice positional embedding for L
@@ -114,4 +114,79 @@ class PositionalEmbedding(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, token: )
+    def __init__(self, d:int, mlp_ratio:int=4, pdrop:float=0.1):
+        super().__init__()
+        self.linear_expand = nn.Linear(
+            in_features=d,
+            out_features=d*mlp_ratio,
+            bias=True
+        )
+        self.act = nn.GELU()
+        self.drop = nn.Dropout(p=pdrop)
+        self.linear_compress = nn.Linear(
+            in_features=d*mlp_ratio,
+            out_features=d,
+            bias=True
+        )
+
+    def forward(self, x:torch.Tensor)->torch.Tensor:
+        x = self.linear_expand(x)
+        x = self.act(x)
+        x = self.linear_compress(x)
+        return x
+    
+
+class EncoderBlock(nn.Module):
+    def __init__(self, dim:int, heads:int, mlp_ratio:float, pdrop:float=0.1, p_attn:float=0.1):
+        super().__init__()
+        assert dim % heads == 0, "dim must be divisible by heads"
+        # rescale features per token to have mean 0, variance 1
+        self.ln1 = nn.LayerNorm(dim)
+        self.mha = nn.MultiheadAttention(
+            embed_dim=dim,
+            num_heads=heads,
+            batch_first=True,
+            dropout=p_attn
+        )
+        self.drop1 = nn.Dropout(pdrop)
+        self.ln2 = nn.LayerNorm(dim)
+        self.mlp = MLP(dim, mlp_ratio)
+        self.drop2 = nn.Dropout(pdrop)
+    
+    def forward(self, x:torch.Tensor):
+        # attention
+        x_norm = self.ln1(x)
+        attn_out, _ = self.mha(x_norm, x_norm, x_norm)
+        x = x + self.drop1(attn_out)
+
+        # mlp
+        x_norm = self.ln2(x)
+        mlp_out = self.mlp(x_norm)
+        x = x + self.drop2(mlp_out) # residual add
+
+        return x
+
+
+class TransformerEncoder1D(nn.Module):
+    def __init__(self, dim:int, depth:int, heads:int, mlp_ratio:float, pdrop:float=0.1):
+        super().__init__()
+        self.blocks = nn.ModuleList([EncoderBlock(
+            dim=dim,
+            heads=heads,
+            mlp_ratio=mlp_ratio,
+            pdrop=pdrop
+        ) for _ in range(depth)])
+
+    def forward(self, x: torch.Tensor):
+        for block in self.blocks:
+            x = block(x)
+        return x
+    
+
+
+
+
+
+
+
+

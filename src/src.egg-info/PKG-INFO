@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: src
+Version: 0.1.0
+Summary: eeg denoiser
+Author-email: Yena Chang <yenachng02@gmail.com>
+Requires-Dist: torch
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: mne-bids
+Requires-Dist: bids-validator

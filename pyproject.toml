@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "src"
+version = "0.1.0"
+description = "eeg denoiser"
+authors = [{ name = "Yena Chang", email = "yenachng02@gmail.com" }]
+dependencies = [
+    "torch",
+    "numpy",
+    "pandas",
+    "mne-bids",
+    "bids-validator",
+]

@@ -10,7 +10,8 @@ def zscore_per_channel(x: np.ndarray, axis: int=-1, eps: float=1e-8)-> np.ndarra
     std = x.std(axis=axis, keepdims=True)
     return (x-m)/(std+eps)
 
-class multiTaskWindows(torch.utils.data.Dataset):
+
+class MultiTaskWindows(torch.utils.data.Dataset):
     # pools windows across tasks
     '''
     input : several eeg recordings grouped by task
