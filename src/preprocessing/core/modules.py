@@ -7,23 +7,19 @@ import torch.nn.functional as F
 
 class DepthwiseSeparableConv1d(nn.Module):
     '''
-    applies a depthwise conv (per channel temporal filtering) then a pointwise conv (channel mixing) then normalization and gelu
-    input: (b, in_ch, t)
-    output: (b, out_ch, t_out) with same length if matching padding
-    params: kernel k, stride s, dilation d
+    per-channel temporal filtering + 1x1 mixing
     '''
     def __init__(self, in_ch: int, out_ch: int, k: int=7, s: int=1, d:int=1):
         super().__init__()
         self.depthwise = nn.Conv1d(in_ch, in_ch, k, s, (k-1)//2, d, groups=in_ch)
-        self.pointwise = nn.Conv1d(in_ch, out_ch, 1, s, 0, groups=1)
+        self.pointwise = nn.Conv1d(in_ch, out_ch, 1, 1, 0, bias=False)
         self.norm = nn.GroupNorm(1, out_ch)
-        self.gelu = nn.GELU()
-
+        self.act = nn.GELU()
     def forward(self, x):
         x = self.depthwise(x)
         x = self.pointwise(x)
         x = self.norm(x)
-        x = self.gelu(x)
+        x = self.act(x)
         return x
 
 
@@ -31,12 +27,8 @@ class ConvStem(nn.Module):
     '''
     input: (b,c,t)
     output: (b, hidden, t//2)
-
-    first block: a regular conv -> local patterns
-    second block: a depthwise separable conv with stride=2 -> halves time length
-    norm + activation after each
     '''
-    def __init__(self, in_ch: int, hidden: int, k: int=7):
+    def __init__(self, in_ch: int, hidden: int=256, k: int=7):
         super().__init__()
         self.conv_in = nn.Conv1d(
             in_channels=in_ch,
@@ -54,12 +46,12 @@ class ConvStem(nn.Module):
             d=1
         )
         self.norm = nn.GroupNorm(1, hidden)
-        self.gelu = nn.GELU()
+        self.act = nn.GELU()
 
     def forward(self, x):
         x = self.conv_in(x)
         x = self.norm(x)
-        x = self.gelu(x)
+        x = self.act(x)
         x = self.dwsep(x)
         return x
     
@@ -87,6 +79,21 @@ class Patchify1D(nn.Module):
         tokens = x.reshape(b, L, h*self.ps)
         return tokens
     
+class PatchProject(nn.Module):
+    '''
+    projection after patchify to match transformer dim
+    (b, L, hidden*ps) -> (b, L, dim)
+    '''
+    def __init__(self, in_dim:int, dim:int):
+        super().__init__()
+        self.proj = nn.Linear(
+            in_features=in_dim,
+            out_features=dim,
+            bias=False
+        )
+
+    def forward(self, tokens):
+        return self.proj(tokens)
 
 class PositionalEmbedding(nn.Module):
     '''
@@ -103,6 +110,8 @@ class PositionalEmbedding(nn.Module):
         self.pe = nn.Parameter(torch.zeros(1, max_len, dim))
         # init with small random values (instead of all zeros)
         nn.init.trunc_normal_(self.pe, std=0.02)
+        self.postconv = nn.Conv1d(dim, dim, kernel_size=5, padding=2, groups=dim)
+        
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
         _,L,_ = x.shape
@@ -110,11 +119,15 @@ class PositionalEmbedding(nn.Module):
             raise ValueError(f"sequence length {L} > max len {self.max_len}")
         # slice positional embedding for L
         pos = self.pe[:, :L, :]
+        pos = self.postconv(pos.transpose(1,2)).transpose(1,2)
         return x + pos
 
 
 class MLP(nn.Module):
-    def __init__(self, d:int, mlp_ratio:int=4, pdrop:float=0.1):
+    '''
+    token mlp
+    '''
+    def __init__(self, d:int=256, mlp_ratio:int=4, pdrop:float=0.1):
         super().__init__()
         self.linear_expand = nn.Linear(
             in_features=d,
@@ -132,11 +145,15 @@ class MLP(nn.Module):
     def forward(self, x:torch.Tensor)->torch.Tensor:
         x = self.linear_expand(x)
         x = self.act(x)
+        x = self.drop(x)
         x = self.linear_compress(x)
         return x
     
 
 class EncoderBlock(nn.Module):
+    '''
+    pre-ln mha + mlp
+    '''
     def __init__(self, dim:int, heads:int, mlp_ratio:float, pdrop:float=0.1, p_attn:float=0.1):
         super().__init__()
         assert dim % heads == 0, "dim must be divisible by heads"
@@ -183,9 +200,27 @@ class TransformerEncoder1D(nn.Module):
         return x
     
 
+class Encoder1D(nn.Module):
+    '''
+    (b,c,t) -> (b,L,d)
+    '''
+    def __init__(self, c:int, hidden:int, patch:int, dim:int, depth:int, heads:int, mlp_ratio:int, max_len:int):
+        super().__init__()
+        self.stem = ConvStem(c, hidden)
+        self.patch = Patchify1D(patch)
+        self.proj = PatchProject(hidden*patch, dim)
+        self.pos = PositionalEmbedding(max_len, dim)
+        self.tr = TransformerEncoder1D(dim, depth, heads, mlp_ratio)
+        self.ln = nn.LayerNorm(dim)
 
-
-
+    def forward(self, x):
+        x = self.stem(x)
+        tokens = self.patch(x)
+        tokens = self.proj(tokens)
+        tokensp = self.pos(tokens)
+        tokenst = self.tr(tokensp)
+        tokens_norm = self.ln(tokenst)
+        return tokens_norm
 
 
 
