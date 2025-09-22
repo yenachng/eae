@@ -22,3 +22,5 @@ for tk, paths in paths_by_task.items():
     print(f"{tk:}\n {paths}")
 builder = BuildArrays()
 builder.load_arrays_by_task(subject_0, paths_by_task)
+
+arrays_by_task = builder.arrays_by_task(subject_0)

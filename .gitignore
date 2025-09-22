@@ -16,7 +16,7 @@ env/
 data/
 *.log
 scraps/
-
+clean/
 # jupyter
 .ipynb_checkpoints/
 

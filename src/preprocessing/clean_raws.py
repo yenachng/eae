@@ -51,8 +51,11 @@ class BuildArrays():
                 for bp, raw in load_raws(paths):
                     X = self.clean_raw(raw)
                     out_dir = Path("cleaned")/subject/tk
-                    run = f"{int(bp.run):02d}" if runtype =="multi_run" else "01"
-                    out_path = out_dir/f"{tk}_{bp.task}_{run}.npy"
+                    run = f"{int(bp.run):02d}" if runtype =="multi_run" else None
+                    if run is None:
+                        out_path = out_dir/f"{tk}_{bp.task}_single_run.npy"
+                    else:
+                        out_path = out_dir/f"{tk}_{bp.task}_run{run}.npy"
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     np.save(out_path, X.astype("float32"))
 
@@ -61,7 +64,7 @@ class BuildArrays():
                         "session": bp.session or None,
                         "task": bp.task,
                         "task_type": tk,
-                        "run": bp.run,
+                        "run": run,
                         "sfreq": float(raw.info["sfreq"]),
                         "n_channels": X.shape[0],
                         "path_npy": str(out_path),
@@ -69,10 +72,28 @@ class BuildArrays():
                         "reference": "average",
                         "dropped_ref": True
                     }
-                    
-                    meta_path = out_dir/f"{tk}_{bp.task}_{run}.json"
+                    if run is None:
+                        meta_path = out_dir/f"{tk}_{bp.task}_single_run.json"
+                    else:
+                        meta_path = out_dir/f"{tk}_{bp.task}_run{run}.json"
                     with open(meta_path, "w") as f:
                         json.dump(meta, f)
 
                     print(f"saved to {out_path},\n{meta_path}")
 
+    def arrays_by_task(self, subject:str, cleaned_root:str="cleaned"):
+        cleaned_dir = Path(cleaned_root) / subject
+        if not Path(cleaned_dir).exists():
+            raise ValueError(f"no cleaned data for {subject}")
+        tasks = ["active", "passive", "rest"]
+        arrays_by_task_dict = {}
+
+        for task in tasks:
+            tdir = cleaned_dir / task
+            out = []
+            for npyfile in tdir.glob("*.npy"):
+                arr = np.load(npyfile)
+                out.append(arr)
+        arrays_by_task_dict[task] = out
+
+        return arrays_by_task_dict
